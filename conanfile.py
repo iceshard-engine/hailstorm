@@ -1,8 +1,8 @@
 from conan import ConanFile
 from conan.tools.cmake import CMakeToolchain, CMake, cmake_layout, CMakeDeps
 
-class IceShardHailStormRecipe(ConanFile):
-    name = "ice-hailstorm"
+class IceShardHailstormRecipe(ConanFile):
+    name = "hailstorm"
     version = "0.1.0"
     package_type = "static-library"
     user = "iceshard"
