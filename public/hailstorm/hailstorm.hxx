@@ -226,4 +226,4 @@ namespace hailstorm
     using HailstormResource = v1::HailstormResource;
     using HailstormData = v1::HailstormData;
 
-} // namespace ice
+} // namespace hailstorm
