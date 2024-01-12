@@ -508,8 +508,8 @@ namespace hailstorm::v1
     ) noexcept -> hailstorm::Memory
     {
         uint32_t const count_ids = uint32_t(data.paths.size());
-        assert(count_ids == ice::count(data.data));
-        assert(count_ids == ice::count(data.metadata) || count_ids <= ice::count(data.metadata_mapping));
+        assert(count_ids == data.data.size());
+        assert(count_ids == data.metadata.size() || count_ids <= data.metadata_mapping.size());
 
         HailstormAsyncWriteParams async_params_empty{ .base_params = params };
         return write_cluster_internal<DataWriterMode::Synchronous>(params, async_params_empty, data).result_memory();
@@ -521,8 +521,8 @@ namespace hailstorm::v1
     ) noexcept
     {
         uint32_t const count_ids = uint32_t(data.paths.size());
-        assert(count_ids == ice::count(data.data));
-        assert(count_ids == ice::count(data.metadata) || count_ids <= ice::count(data.metadata_mapping));
+        assert(count_ids == data.data.size());
+        assert(count_ids == data.metadata.size() || count_ids <= data.metadata_mapping.size());
 
         write_cluster_internal<DataWriterMode::Asynchronous>(params.base_params, params, data);
         return true;
