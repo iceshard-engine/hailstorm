@@ -43,7 +43,7 @@ namespace hailstorm
     struct Array
     {
         Array(hailstorm::Allocator& alloc) noexcept;
-        ~Array() noexcept;
+        ~Array() noexcept = default;
 
         inline bool any() const noexcept;
         inline bool empty() const noexcept;

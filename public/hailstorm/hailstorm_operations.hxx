@@ -318,7 +318,7 @@ namespace hailstorm
             if (final_size > (32 * Constant_1MiB))
             {
                 base_chunk_info.size = final_size;
-                base_chunk_info.align = resource_data.align;
+                base_chunk_info.align = (uint32_t) resource_data.align;
             }
             return base_chunk_info;
         }

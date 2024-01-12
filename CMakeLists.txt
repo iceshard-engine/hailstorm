@@ -9,7 +9,7 @@ add_library(hailstorm
 target_include_directories(hailstorm PUBLIC public)
 
 install(DIRECTORY "${CMAKE_SOURCE_DIR}/public/"
-    DESTINATION "include"
+    DESTINATION "public"
     FILES_MATCHING
     PATTERN "*.hxx"
 )
