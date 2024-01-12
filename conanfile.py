@@ -4,7 +4,7 @@ from conan.tools.cmake import CMakeToolchain, CMake, cmake_layout, CMakeDeps
 class IceShardHailStormRecipe(ConanFile):
     name = "ice-hailstorm"
     version = "0.1.0"
-    package_type = "library"
+    package_type = "static-library"
     user = "iceshard"
     channel = "stable"
 
