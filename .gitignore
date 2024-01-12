@@ -1,0 +1,5 @@
+# Ignore local build files
+build/
+.vscode/
+
+CMakeUserPresets.json
