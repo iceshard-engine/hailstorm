@@ -21,7 +21,7 @@ class IceShardHailStormRecipe(ConanFile):
     default_options = {"fPIC": True}
 
     # Sources are located in the same place as this recipe, copy them to the recipe
-    exports_sources = "LICENSE.md", "CMakeLists.txt", "private/*", "public/*"
+    exports_sources = "LICENSE", "CMakeLists.txt", "private/*", "public/*"
 
     tool_requires = "cmake/[>=3.25.3 <4.0]", "ninja/[>=1.11.1 <2.0]"
 
