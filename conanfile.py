@@ -1,5 +1,6 @@
 from conan import ConanFile
 from conan.tools.cmake import CMakeToolchain, CMake, cmake_layout, CMakeDeps
+from conan.tools.files import copy
 
 class IceShardHailstormRecipe(ConanFile):
     name = "hailstorm"
@@ -47,6 +48,10 @@ class IceShardHailstormRecipe(ConanFile):
         cmake.build()
 
     def package(self):
+        # Copy the license file
+        copy(self, "LICENSE", src=self.folders.source_folder, dst="{}/licenses".format(self.package_folder))
+
+        # Copy CMake installation files
         cmake = CMake(self)
         cmake.install()
 

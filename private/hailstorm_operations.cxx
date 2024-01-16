@@ -37,7 +37,7 @@ namespace hailstorm::v1
     static constexpr size_t Constant_MetadataMinAlign = 8;
     static constexpr size_t Constant_MaxSupportedPackSize = std::numeric_limits<size_t>::max();
     static constexpr uint8_t Constant_U8Max = std::numeric_limits<uint8_t>::max();
-    static constexpr uint8_t Constant_U32Max = std::numeric_limits<uint32_t>::max();
+    static constexpr uint32_t Constant_U32Max = std::numeric_limits<uint32_t>::max();
     static constexpr HailstormChunk Constant_EmptyChunk{ };
 
     auto read_header(
