@@ -303,7 +303,7 @@ namespace hailstorm::v1
 
         // Metadata saved tracker.
         out_metatracker.resize(uint32_t(write_data.metadata_mapping.size()));
-        out_metatracker.memset(Constant_U32Max);
+        out_metatracker.memset(Constant_U8Max);
 
         out_paths.size = 8;
         bool const requires_data_writer_callback = estimate_cluster_chunks(

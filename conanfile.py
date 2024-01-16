@@ -57,3 +57,4 @@ class IceShardHailstormRecipe(ConanFile):
 
     def package_info(self):
         self.cpp_info.libs = ["hailstorm"]
+        self.cpp_info.includedirs = ["public"]
