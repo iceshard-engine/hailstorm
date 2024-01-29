@@ -58,7 +58,7 @@ namespace hailstorm
     {
         if (uintptr_t alignment_miss = (ptr_val % alignment); alignment_miss != 0)
         {
-            ptr_val = alignment - alignment_miss;
+            ptr_val += alignment - alignment_miss;
         }
         return ptr_val;
     }

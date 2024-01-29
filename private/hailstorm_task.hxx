@@ -32,13 +32,8 @@ namespace hailstorm
         {
         }
 
-        inline ~Task() noexcept
-        {
-            if (_coro != nullptr)
-            {
-                _coro.destroy();
-            }
-        }
+        // We don't destroy the coro, since we already never suspend on the final suspend point.
+        inline ~Task() noexcept = default;
 
         inline operator bool() const noexcept { return _coro.done(); }
 

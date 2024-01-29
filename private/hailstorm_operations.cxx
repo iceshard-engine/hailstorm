@@ -271,7 +271,7 @@ namespace hailstorm::v1
         return requires_data_writer_callback;
     }
 
-    auto prepare_cluster_info(
+    bool prepare_cluster_info(
         hailstorm::v1::HailstormWriteParams const& params,
         hailstorm::v1::HailstormWriteData const& write_data,
         hailstorm::Array<HailstormChunk>& out_chunks,
@@ -310,9 +310,6 @@ namespace hailstorm::v1
             params, write_data, out_chunks, out_chunks_refs, out_chunk_sizes, out_metatracker, out_paths, res_count
         );
 
-        // Either we don't need the callback or we need to have it provided!
-        assert(requires_data_writer_callback == false || params.fn_resource_write != nullptr);
-
         // Paths needs to be aligned to boundary of 8
         out_paths.size = align_to(out_paths.size, 8);
 
@@ -323,6 +320,8 @@ namespace hailstorm::v1
             chunk.size = align_to(out_chunk_sizes[chunk_idx], chunk.align);
             chunk_idx += 1;
         }
+
+        return requires_data_writer_callback;
     }
 
     template<hailstorm::DataWriterMode WriterMode>
@@ -339,7 +338,15 @@ namespace hailstorm::v1
         Array<size_t> sizes{ params.temp_alloc };
         Array<uint32_t> metatracker{ params.temp_alloc };
         HailstormPaths paths_info{ };
-        prepare_cluster_info(params, write_data, chunks, refs, sizes, metatracker, paths_info);
+        bool const requires_writer_callback = prepare_cluster_info(
+            params, write_data, chunks, refs, sizes, metatracker, paths_info
+        );
+
+        if constexpr (WriterMode == DataWriterMode::Synchronous)
+        {
+            // Either we don't need the callback or we need to have it provided!
+            assert(requires_writer_callback == false || params.fn_resource_write != nullptr);
+        }
 
         // Calculate an estimated size for the whole cluster.
         // TODO: This size is currently exact, but once we start compressing / encrypting this will no longer be the case.
