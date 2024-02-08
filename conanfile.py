@@ -4,7 +4,7 @@ from conan.tools.files import copy
 
 class IceShardHailstormRecipe(ConanFile):
     name = "hailstorm"
-    version = "0.1.1"
+    version = "0.1.2"
     package_type = "static-library"
     user = "iceshard"
     channel = "stable"

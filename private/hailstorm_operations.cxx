@@ -438,11 +438,11 @@ namespace hailstorm::v1
                 meta_map_idx = std::exchange(metatracker[meta_idx], idx);
             }
 
-            // Calc, Store and ralign the used space so the next value can be already copied onto the proper location.
+            // Calc, store and realign the used space so the next value can be already copied onto the proper location.
             if (meta_map_idx == Constant_U32Max)
             {
                 size_t& meta_chunk_used = sizes[res.meta_chunk];
-                Data const data = write_data.data[idx];
+                Data const data = write_data.metadata[meta_idx];
 
                 // Store meta location
                 res.meta_size = uint32_t(data.size);
