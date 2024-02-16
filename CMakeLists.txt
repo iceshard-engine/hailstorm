@@ -8,6 +8,8 @@ add_library(hailstorm
 
 target_include_directories(hailstorm PUBLIC public)
 
+set_property(TARGET hailstorm PROPERTY CXX_STANDARD 20)
+
 install(DIRECTORY "${CMAKE_SOURCE_DIR}/public/"
     DESTINATION "public"
     FILES_MATCHING

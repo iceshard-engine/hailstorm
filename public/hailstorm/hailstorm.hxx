@@ -99,11 +99,11 @@ namespace hailstorm
         //! \version HSC0-0.0.1
         struct HailstormPaths
         {
-            uint64_t offset;
-            uint64_t size;
+            uint32_t offset;
+            uint32_t size;
         };
 
-        static_assert(sizeof(HailstormPaths) == 16);
+        static_assert(sizeof(HailstormPaths) == 8);
         static_assert(alignof(HailstormHeader) >= alignof(HailstormPaths));
 
         //! \brief Hailstorm chunk information used to optimize loading and keeping resources in memory.
@@ -155,7 +155,11 @@ namespace hailstorm
         };
 
         static_assert(sizeof(HailstormChunk) == 32);
-        static_assert(alignof(HailstormPaths) >= alignof(HailstormChunk));
+
+        // We ensure that the header alignment is at least the same as the chunk alignment
+        //   after that we want to ensure that the paths struct will keep at least chunk alingment valid
+        static_assert(alignof(HailstormHeader) >= alignof(HailstormChunk));
+        static_assert((sizeof(HailstormPaths) % alignof(HailstormChunk)) == 0);
 
         //! \brief Hailstorm resource information, used to access resource related data.
         //! \version HSC0-0.0.1
