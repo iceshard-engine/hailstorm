@@ -83,18 +83,62 @@ Entries contain information about a single resource and where the name, data and
 
 A single block of data containing names of each stored resource. Each `Entry` has an offset and size pointing into this block that defines it's actual name.
 
-## Format description
-
-### BaseHeader
-### Header
-### Chunk
-### Entry
-### PathsInfo
-
 # Quick API examples
+
+The following section provides some basic examples on how to read and write Hailstorm packages.
 
 ## Reading package
 
+```cpp
+
+// Reads 'size' bytes of data into 'memory' from a file starting at 'file_offset'.
+void read_from_file(FILE* file, void* memory, size_t size, size_t file_offset) { ... }
+
+bool process_pack(FILE* file)
+{
+    hailstorm::HailstormHeaderBase base_header;
+    read_from_file(file, &base_header, sizeof(base_header), 0);
+
+    if (base_header.magic != hailstorm::Constant_HailstormMagic)
+    {
+        return false;
+    }
+
+    if (base_header.version != hailstorm::Constant_HailstormHeaderVersionV0)
+    {
+        return false;
+    }
+
+    void* memory_full_header = malloc(base_header.header_size);
+
+    // Read again from file offset '0'
+    read_from_file(file, memory_full_header, base_header.header_size, 0);
+
+    hailstorm::Data const file_data{
+        .location = memory_full_header,
+        .size = base_header.size,
+        .align = 8 /* 64bit assumed allignment, just an example */
+    };
+
+    // Read the file data and fill in a helper struct.
+    hailstorm::HailstormData out_hailstorm_data;
+    hailstorm::Result const result =
+
+    // This function does NOT allocate, the 'out_hailstorm_data' struct is only valid as long as the backing memory 'file_data' is not released.
+    hailstorm::read_header(file_data, out_hailstorm_data);
+
+    if (result != hailstorm::Result::Success)
+    {
+        return false;
+    }
+
+    // Process the hailstorm header information...
+
+    // Release the header data. Invalidates 'out_hailstorm_data' struct.
+    free(memory_full_header);
+}
+```
+
 ## Writing package synchronously
 
-# Some documentation links
+Since writing a package is a bit more complex, even for the synchronous API, an sample project will be prepared to showcase it.

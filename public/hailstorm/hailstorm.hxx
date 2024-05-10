@@ -206,7 +206,7 @@ namespace hailstorm
         static_assert(alignof(HailstormChunk) >= alignof(HailstormResource));
 
         //! \brief Struct providing access to Hailstorm header data wrapped in a more accessible way.
-        //! \note This struct can be filled used some of the hailstorm functions.
+        //! \note This struct can be filled using the hailstorm::read_header function.
         struct HailstormData
         {
             hailstorm::v1::HailstormHeader header;

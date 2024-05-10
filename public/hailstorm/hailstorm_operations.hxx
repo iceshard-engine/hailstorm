@@ -13,6 +13,7 @@ namespace hailstorm
 
         //! \brief Reads hailstorm cluser form the given input containing at least the whole header data.
         //! \note If successful the passed HailstormData struct will have all field updated.
+        //! \warning The passed HailstormData struct is only valid as long as the raw data is valid. If the backing data is released, the struct is considered invalidated.
         //!
         //! \param [in] header_data Containing the whole hailstorm header description.
         //! \param [out] out_hailstorm Hailstorm object that will have fields updated to access header data easily.
