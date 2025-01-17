@@ -67,13 +67,16 @@ namespace hailstorm
 
             //! \brief Reserved for future use.
             //! \version HSC0-0.0.1
-            uint8_t _unused05b : 4;
+            uint8_t _unused01 : 4;
+
+            //! \brief Number of bytes for app specific header data.
+            uint16_t count_appcustom_bytes;
 
             //! \brief Number of data chunks in this pack.
             uint16_t count_chunks;
 
             //! \brief Number of resources in this pack.
-            uint16_t count_resources;
+            uint32_t count_resources;
 
             //! \brief Unique pack identifier used for patch and extension packs.
             //! \details The identifier should be unique of base packs, however patch and expansion packs
@@ -87,13 +90,14 @@ namespace hailstorm
             //! \remarks Values need to be growing.
             uint32_t pack_order;
 
-            //! \brief Custom values available for application specific use.
-            uint32_t app_custom_values[4];
+            //! \brief Reserved for future use.
+            //! \version HSC0-0.0.1
+            uint32_t _unused02;
         };
 
         static_assert(sizeof(HailstormHeaderBase) == 16);
-        static_assert(sizeof(HailstormHeader) - sizeof(HailstormHeaderBase) == 48);
-        static_assert(sizeof(HailstormHeader) == 64);
+        static_assert(sizeof(HailstormHeader) - sizeof(HailstormHeaderBase) == 40);
+        static_assert(sizeof(HailstormHeader) == 56);
 
         //! \brief Hailstorm path information. Optional, might not contain actuall data.
         //! \version HSC0-0.0.1

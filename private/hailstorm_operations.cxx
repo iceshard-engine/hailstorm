@@ -112,10 +112,12 @@ namespace hailstorm::v1
         uint32_t resource_count,
         std::span<hailstorm::v1::HailstormChunk const> chunks,
         hailstorm::v1::HailstormPaths paths,
-        hailstorm::v1::detail::Offsets& out_offsets
+        hailstorm::v1::detail::Offsets& out_offsets,
+        hailstorm::Data customdata
     ) noexcept -> size_t
     {
         size_t final_size = sizeof(HailstormHeader);
+        detail::increase_size<uint8_t>(final_size, customdata.size);
         out_offsets.paths_info = detail::increase_size<HailstormPaths>(final_size);
         out_offsets.chunks = detail::increase_size<HailstormChunk>(final_size, chunks.size());
         out_offsets.resources = detail::increase_size<HailstormResource>(final_size, resource_count);
@@ -351,7 +353,7 @@ namespace hailstorm::v1
         // Calculate an estimated size for the whole cluster.
         // TODO: This size is currently exact, but once we start compressing / encrypting this will no longer be the case.
         detail::Offsets offsets;
-        size_t const final_cluster_size = cluster_size_info(res_count, chunks, paths_info, offsets);
+        size_t const final_cluster_size = cluster_size_info(res_count, chunks, paths_info, offsets, write_data.custom_headerdata);
 
         // Fill-in header data
         HailstormHeader header{
@@ -363,16 +365,12 @@ namespace hailstorm::v1
             .is_patch = false,
             .is_baked = false,
             .count_chunks = uint16_t(chunks.count()),
-            .count_resources = uint16_t(res_count),
+            .count_resources = res_count,
         };
         header.magic = Constant_HailstormMagic;
         header.header_version = Constant_HailstormHeaderVersionV0;
         header.header_size = offsets.paths_data;
         paths_info.offset = offsets.paths_data;
-
-        // Copy custom values into the final header.
-        static_assert(sizeof(write_data.custom_values) == sizeof(header.app_custom_values));
-        std::memcpy(header.app_custom_values, write_data.custom_values, sizeof(header.app_custom_values));
 
         // Place chunk offsets at their proper location.
         size_t chunk_offset = offsets.data;
@@ -399,6 +397,10 @@ namespace hailstorm::v1
 
         // Copy over all chunk data
         co_await writer.write_header(data_view(header), 0);
+        if (write_data.custom_headerdata.size > 0)
+        {
+            co_await writer.write_header(write_data.custom_headerdata, sizeof(header));
+        }
         co_await writer.write_header(data_view(paths_info), offsets.paths_info);
         co_await writer.write_header(chunks.data_view(), offsets.chunks);
 

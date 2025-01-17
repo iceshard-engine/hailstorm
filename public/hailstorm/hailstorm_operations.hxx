@@ -116,7 +116,7 @@ namespace hailstorm
             std::span<uint32_t const> metadata_mapping;
 
             //! \brief Application custom values.
-            uint32_t custom_values[4];
+            hailstorm::Data custom_headerdata;
         };
 
         //! \brief Used to select chunks for resource metadata and data destinations.
