@@ -130,7 +130,7 @@ namespace hailstorm::v1
 
         for (HailstormChunk const& chunk : chunks)
         {
-            assert((chunks.size % def_align) == 0);
+            assert((chunks.size() % def_align) == 0);
             final_size += chunk.size;
         }
         return final_size;
@@ -588,9 +588,9 @@ namespace hailstorm::v1
                 while(data_remaining > 0)
                 {
                     size_t const read_offset = data.size - data_remaining;
+                    size_t& data_chunk_used = sizes[write_chunk];
                     assert(read_offset == 0 || data_chunk_used == 0);
 
-                    size_t& data_chunk_used = sizes[write_chunk];
                     size_t const data_chunk_size = chunks[write_chunk].size;
                     size_t const data_chunk_available = data_chunk_size - data_chunk_used;
                     size_t const data_chunk_written = std::min(data_chunk_available, data_remaining);
