@@ -67,28 +67,46 @@ namespace hailstorm
 
             //! \brief Reserved for future use.
             //! \version HSC0-0.0.1
-            uint8_t _unused05b : 4;
+            uint8_t _unused04b : 4;
 
             //! \brief Number of data chunks in this pack.
-            uint16_t count_chunks;
+            uint32_t count_chunks;
 
             //! \brief Number of resources in this pack.
-            uint16_t count_resources;
+            uint32_t count_resources;
+
+            //! \brief If greater than '0', the whole pack is sliced into chunks of aligned to the given size.
+            //! \remarks The minimum value is at least 4KiB and needs to be a power of '2'. When an invalid value is specified writing will result with an error.
+            //!
+            //! \note This means that each chunk size is a multiple of the `pack_slice_alignment` value. The pack header and paths are also aligned to this value.
+            //! \note The data layout:
+            //!   * '[header]' - aligned to 'pack_slice_alignment'
+            //!   * '[paths]' - aligned to 'pack_slice_alignment'
+            //!   * '[chunks...]' - each chunk aligned to 'pack_slice_alignment'
+            uint32_t pack_slice_alignment;
 
             //! \brief Unique pack identifier used for patch and extension packs.
-            //! \details The identifier should be unique of base packs, however patch and expansion packs
+            //! \details The identifier should be unique for base packs, however patch and expansion packs
             //!   need to set this ID to the base pack that is beeing updated.
             //! \remarks Each pack needs to have a unique ID. Values are application defined.
             uint32_t pack_id;
 
-            //! \brief Integer value starting at '1' and increasing by one for each extension and patch pack applied to a base pack.
-            //! \note This value is always '0' for base packs. The pack order for patch and extension packs is independent.
-            //! \example After applying 1 extension pack and 4 patch packs, the next pack orders will be '2' and '5' respectively.
+            //! \brief Integer value starting at '0' and increasing for each extension pack applied to a base pack.
+            //! \note This value is '0' only for base packs.
+            //! \example After applying two extension packs to a pack with id '1', a patch targeting this version
+            //!     is requried to set 'pack_id' and 'pack_expansion_ver' to '1' and '2' respectively.
             //! \remarks Values need to be growing.
-            uint32_t pack_order;
+            uint16_t pack_expansion_ver;
+
+            //! \brief Integer value starting at '0' and increasing for each patch pack applied to a base or extension pack.
+            //! \note This value is '0' only for base and extension pack pairs.
+            //! \example After applying two patches to (id:1, ext_ver:0) the 'patch_ver' is '2' for this pair, but the 'patch_ver' for (id:1, ext_ver:1) is still '0'.
+            //! \remarks Values need to be growing.
+            uint16_t pack_patch_ver;
 
             //! \brief Custom values available for application specific use.
-            uint32_t app_custom_values[4];
+            //! \note The array size may change in the future.
+            uint32_t app_custom_values[2];
         };
 
         static_assert(sizeof(HailstormHeaderBase) == 16);
@@ -126,9 +144,19 @@ namespace hailstorm
             //!   ensures all resources data is stored at the proper alignment.
             uint32_t align;
 
+            //! \brief Number of entries stored in this chunk. Can be used to optimize runtime allocations.
+            uint32_t count_entries;
+
             //! \brief The type of data stored in this chunk. One of: AppSpecific/Undefined = 0, Metadata = 1, FileData = 2, Mixed = 3
             //! \note When a chunk has 'AppSpecific' data, it's contents is undefined by the format.
             uint8_t type : 2;
+
+            //! \brief Contains additional info in regards how data is stored and how it should be loaded.
+            //! \note Flags
+            //!   * 'None' - Regular independent chunk, load as a single block of data. (value: 0, default)
+            //!   * 'Partial' - Data is part of a bigger resource spaning multiple chunks that needs to be loaded together. (value: 1)
+            //!   * 'Streamed' - Data is part of a bigger resource spaning multiple chunks that can be loaded and unloaded independently. (value: 3, implies: 'Partial')
+            uint8_t flags : 2;
 
             //! \brief The preffered loading strategy. One of: Temporary = 0, Regular = 1, LoadIfPossible = 2, LoadAlways = 3
             //! \note Persistance details:
@@ -136,7 +164,7 @@ namespace hailstorm
             //!   * 'regular' - used for on-demand loading, but can be unloaded if necessary and unused. (value: 1)
             //!   * 'load if possible' - used for common resources files that allow to reduce loading times in various locations. (value: 2)
             //!   * 'force-load' - used for resources that are accessed all the time and/or should never be reloaded. (value: 3)
-            uint8_t persistance : 4;
+            uint8_t persistance : 2;
 
             //! \brief The chunk data is encrypted separately. Load the whole chunk and decrypt it before reading.
             //! \note If data was also compressed, this step is done BEFORE decompressing the data.
@@ -148,13 +176,10 @@ namespace hailstorm
 
             //! \brief Custom value available for application specific use.
             //! \note This field may reused by the format in the future.
-            uint8_t app_custom_value;
-
-            //! \brief Number of entries stored in this chunk. Can be used to optimize runtime allocations.
-            uint16_t count_entries;
+            uint8_t app_custom_value[7];
         };
 
-        static_assert(sizeof(HailstormChunk) == 32);
+        static_assert(sizeof(HailstormChunk) == 40);
 
         // We ensure that the header alignment is at least the same as the chunk alignment
         //   after that we want to ensure that the paths struct will keep at least chunk alingment valid
@@ -166,10 +191,10 @@ namespace hailstorm
         struct HailstormResource
         {
             //! \brief The chunk index at which resource data is stored.
-            uint16_t chunk;
+            uint32_t chunk;
 
             //! \brief The chunk index at which resource metadata is stored.
-            uint16_t meta_chunk;
+            uint32_t meta_chunk;
 
             //! \brief The offset at which data is stored. This value is relative to the chunk it is stored in.
             uint32_t offset;
@@ -191,18 +216,20 @@ namespace hailstorm
 
                 //! \brief An absolute resource index of the resource to be replaced.
                 //! \note When a patch pack is created it requires access to all base and extensions packs with 'pack_id' and 'pack_order'
-                //!   set properly to calculate this 'patch_resource_index' value.
+                //!   set properly to calculate this 'pack_resource_index' value.
                 //! \example If we have a pack (res_count = 30) with two extensions (res_count = 7), a patch to the second resource
-                //!   in the second extension pack would set 'patch_resource_index' to '38'. Indexing starts at '0' so '30 + 7 + 1'.
-                //! \warning Only valid on 'patch' packs.
-                uint32_t patch_resource_index;
+                //!   in the second extension pack would set 'pack_resource_index' to '38'. Indexing starts at '0' so '30 + 7 + 1'.
+                //! \warning Only valid on 'expansion' and 'patch' packs.
+                uint32_t pack_resource_index;
             };
 
             //! \brief The size of the path.
+            //! \note A value of '0' is allowed in 'expansion' and 'patch' packs, which then requires a pack reader to use 'pack_resource_index' instead of
+            //!   'path_offset' to reference the actual resource.
             uint32_t path_size;
         };
 
-        static_assert(sizeof(HailstormResource) == 28);
+        static_assert(sizeof(HailstormResource) == 32);
         static_assert(alignof(HailstormChunk) >= alignof(HailstormResource));
 
         //! \brief Struct providing access to Hailstorm header data wrapped in a more accessible way.

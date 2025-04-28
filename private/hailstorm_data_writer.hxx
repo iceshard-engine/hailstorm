@@ -63,10 +63,10 @@ namespace hailstorm
         }
 
         auto write_resource(
-            hailstorm::v1::HailstormWriteData const& data, uint32_t idx, size_t offset
+            hailstorm::v1::HailstormWriteData const& data, uint32_t idx, size_t write_offset
         ) noexcept
         {
-            hailstorm::Memory const target_mem = ptr_add(_memory, offset);
+            hailstorm::Memory const target_mem = ptr_add(_memory, write_offset);
 
             // If data has a nullptr locations, call the write callback to access resource data.
             // This allows us to "stream" input data to the final buffer.
@@ -127,17 +127,17 @@ namespace hailstorm
         }
 
         auto write_resource(
-            hailstorm::v1::HailstormWriteData const& data, uint32_t idx, size_t offset
+            hailstorm::v1::HailstormWriteData const& data, uint32_t idx, size_t write_offset
         ) noexcept
         {
-            return DataWriterStage{ _params.fn_async_write_resource(data, idx, offset, _params.async_userdata) };
+            return DataWriterStage{ _params.fn_async_write_resource(data, idx, write_offset, _params.async_userdata) };
         }
 
         auto write_metadata(
-            hailstorm::v1::HailstormWriteData const& data, uint32_t idx, size_t offset
+            hailstorm::v1::HailstormWriteData const& data, uint32_t idx, size_t write_offset
         ) noexcept
         {
-            return DataWriterStage{ _params.fn_async_write_metadata(data, idx, offset, _params.async_userdata) };
+            return DataWriterStage{ _params.fn_async_write_metadata(data, idx, write_offset, _params.async_userdata) };
         }
 
         auto write_custom_chunk_data(

@@ -15,12 +15,11 @@ namespace hailstorm::v1
 
         struct Offsets
         {
-            size_t chunks;
-            size_t ids;
-            size_t resources;
-            size_t data;
             size_t paths_info;
+            size_t chunks;
+            size_t resources;
             size_t paths_data;
+            size_t data;
         };
 
         template<typename T>
@@ -109,21 +108,29 @@ namespace hailstorm::v1
     }
 
     auto cluster_size_info(
+        uint32_t pack_slice_alignment,
         uint32_t resource_count,
         std::span<hailstorm::v1::HailstormChunk const> chunks,
         hailstorm::v1::HailstormPaths paths,
         hailstorm::v1::detail::Offsets& out_offsets
     ) noexcept -> size_t
     {
+        uint32_t const def_align = std::max<uint32_t>(pack_slice_alignment, 8);
+
         size_t final_size = sizeof(HailstormHeader);
         out_offsets.paths_info = detail::increase_size<HailstormPaths>(final_size);
         out_offsets.chunks = detail::increase_size<HailstormChunk>(final_size, chunks.size());
         out_offsets.resources = detail::increase_size<HailstormResource>(final_size, resource_count);
-        out_offsets.paths_data = detail::increase_size<char>(final_size, paths.size, 8);
-        out_offsets.data = final_size;
+
+        // First pack slice, we align the current 'final_size' to 'pack_slice_alignment' making 'paths_data' start at the next 'pack_slice_alignment' alignment.
+        out_offsets.paths_data = detail::increase_size<char>(final_size, paths.size, def_align);
+
+        // Second pack slice, chunk data is stored at alignment 'pack_slice_alignment' which moves 'final_size' forward until it's aligned.
+        out_offsets.data = align_to(final_size, def_align);
 
         for (HailstormChunk const& chunk : chunks)
         {
+            assert((chunks.size % def_align) == 0);
             final_size += chunk.size;
         }
         return final_size;
@@ -142,6 +149,9 @@ namespace hailstorm::v1
     {
         bool requires_data_writer_callback = false;
 
+        uint32_t partial_chunk_start = std::numeric_limits<uint32_t>::max();
+        uint32_t partial_chunk_count = 0;
+        uint32_t covered_multichunk_size = 0;
         for (uint32_t idx = 0; idx < res_count;)
         {
             // If the metadata is shared, check for the already assigned chunk
@@ -156,7 +166,7 @@ namespace hailstorm::v1
             requires_data_writer_callback |= data.location == nullptr;
 
             // Get the selected chunks for the data and metadata.
-            HailstormWriteChunkRef ref = params.fn_select_chunk(meta, data, chunks, params.userdata);
+            HailstormWriteChunkRef ref = params.fn_select_chunk(meta, data, chunks, partial_chunk_start, partial_chunk_count, params.userdata);
 
             bool shared_metadata = false;
             if (ref.data_create == false && ref.meta_create == false)
@@ -174,7 +184,7 @@ namespace hailstorm::v1
                     }
                 }
 
-                size_t const data_remaining = (chunks[ref.data_chunk].size - sizes[ref.data_chunk]) - static_cast<size_t>(data.align);
+                size_t const data_remaining = covered_multichunk_size + ((chunks[ref.data_chunk].size - sizes[ref.data_chunk]) - static_cast<size_t>(data.align));
                 size_t const meta_remaining = (chunks[ref.meta_chunk].size - sizes[ref.meta_chunk]) - Constant_MetadataMinAlign;
 
                 // Check if we need to create a new chunk due to size restrictions.
@@ -190,8 +200,21 @@ namespace hailstorm::v1
                 }
             }
 
-            if (ref.data_create)
+            while (ref.data_create)
             {
+                HailstormChunk const& prev_chunk = chunks[ref.data_chunk];
+                if (prev_chunk.flags > 0) // If we can hold partial data...
+                {
+                    // We use all the remaining size of the current chunk before creating the next one.
+                    covered_multichunk_size += (prev_chunk.size - sizes[ref.data_chunk]);
+
+                    if (partial_chunk_count == 0)
+                    {
+                        partial_chunk_start = ref.data_chunk;
+                    }
+                    partial_chunk_count += 1;
+                }
+
                 HailstormChunk new_chunk = params.fn_create_chunk(
                     meta, data, chunks[ref.data_chunk], params.userdata
                 );
@@ -199,26 +222,54 @@ namespace hailstorm::v1
                 new_chunk.size_origin = 0;
                 new_chunk.count_entries = 0;
 
+                // Only 'file data' or 'app-specific' chunks can be partial.
+                assert(
+                    new_chunk.flags == 0 || (new_chunk.type == 2 || new_chunk.type == 0)
+                );
+
                 // Either mixed or data only chunks
                 assert(
                     (ref.data_chunk == ref.meta_chunk && new_chunk.type == 3)
                     || (new_chunk.type == 2)
                 );
 
+                // Force the alignment value and realign the chunk size if necessary.
+                if (params.pack_slice_alignment > 0)
+                {
+                    new_chunk.align = params.pack_slice_alignment;
+                    new_chunk.size = align_to(new_chunk.size, params.pack_slice_alignment);
+                }
+
                 // Push the new chunk
                 chunks.push_back(new_chunk);
                 sizes.push_back(0);
+
+                // Unless the covered size along with the new chunk size are big enough to hold the data object, we continue creating chunks.
+                ref.data_create = covered_multichunk_size + new_chunk.size < data.size;
+                ref.data_chunk += uint32_t(ref.data_create); // +1 (if we continue adding chunks)
+                assert((ref.data_chunk + 1) == chunks.count()); // TODO: Allow adding continous chunks not only at the end of the chunk list.
+
+                // It would be impossible to cover the data object if chunks would not allow for partial data allocation.
+                assert(ref.data_create == false || new_chunk.flags > 0);
             }
 
             if (ref.meta_create)
             {
                 assert(shared_metadata == false);
-                HailstormChunk const new_chunk = params.fn_create_chunk(
+                HailstormChunk new_chunk = params.fn_create_chunk(
                     meta, data, chunks[ref.meta_chunk], params.userdata
                 );
 
                 // Meta only chunks
                 assert(new_chunk.type == 1);
+                assert(new_chunk.flags == 0);
+
+                // Force the alignment value and realign the chunk size if necessary.
+                if (params.pack_slice_alignment > 0)
+                {
+                    new_chunk.align = params.pack_slice_alignment;
+                    new_chunk.size = align_to(new_chunk.size, params.pack_slice_alignment);
+                }
 
                 // Push the new chunk
                 chunks.push_back(new_chunk);
@@ -258,7 +309,33 @@ namespace hailstorm::v1
 
                 sizes[ref.meta_chunk] = align_to(sizes[ref.meta_chunk], 8) + meta.size;
             }
-            sizes[ref.data_chunk] = align_to(sizes[ref.data_chunk], data.align) + data.size;
+
+            // Once we enabled partial chunks, we are forced to save the current data in the first partial chunk with data available.
+            if (partial_chunk_count > 0)
+            {
+                assert(partial_chunk_start == ref.data_chunk);
+                uint32_t const partial_chunk_end = partial_chunk_start + partial_chunk_count;
+
+                size_t remaining_data_size = data.size;
+                while(remaining_data_size > 0)
+                {
+                    size_t const chunk_size = chunks[ref.data_chunk].size;
+                    size_t const used_size = align_to(sizes[ref.data_chunk], data.align);
+                    size_t const available_size = chunk_size - used_size;
+                    size_t const taken_size = std::min<size_t>(available_size, remaining_data_size);
+
+                    sizes[ref.data_chunk] += taken_size;
+                    remaining_data_size -= taken_size;
+
+                    ref.data_chunk += 1;
+                }
+
+                assert(partial_chunk_end == ref.data_chunk);
+            }
+            else
+            {
+                sizes[ref.data_chunk] = align_to(sizes[ref.data_chunk], data.align) + data.size;
+            }
 
             // Calculate total size needed for all paths to be stored
             uint32_t const path_size = uint32_t(write_data.paths[idx].size());
@@ -266,6 +343,11 @@ namespace hailstorm::v1
 
             // Increase index at the end
             idx += 1;
+
+            // Since we now 'allocated' chunks for this data object, we reset the 'covered' value
+            partial_chunk_start = std::numeric_limits<uint32_t>::max();
+            partial_chunk_count = 0;
+            covered_multichunk_size = 0;
         }
 
         return requires_data_writer_callback;
@@ -282,15 +364,27 @@ namespace hailstorm::v1
     ) noexcept
     {
         uint32_t const res_count = uint32_t(write_data.paths.size());
+        uint32_t const def_align = std::max<uint32_t>(params.pack_slice_alignment, 8);
 
         out_chunks.reserve(params.estimated_chunk_count);
         out_chunks.push_back(params.initial_chunks);
 
         if (out_chunks.count() == 0)
         {
-            HailstormChunk const new_chunk = params.fn_create_chunk(
-                Data{.align = 8}, Data{.align = 8}, Constant_EmptyChunk, params.userdata
+            HailstormChunk new_chunk = params.fn_create_chunk(
+                Data{.align = def_align}, Data{.align = def_align}, Constant_EmptyChunk, params.userdata
             );
+
+            // Only 'file data' or 'app-specific' chunks can be partial.
+            assert(new_chunk.flags == 0 ^ (new_chunk.type == 2 || new_chunk.type == 0));
+
+            // Force the alignment value and realign the chunk size if necessary.
+            if (params.pack_slice_alignment > 0)
+            {
+                new_chunk.align = params.pack_slice_alignment;
+                new_chunk.size = align_to(new_chunk.size, params.pack_slice_alignment);
+            }
+
             out_chunks.push_back(new_chunk);
         }
 
@@ -310,8 +404,8 @@ namespace hailstorm::v1
             params, write_data, out_chunks, out_chunks_refs, out_chunk_sizes, out_metatracker, out_paths, res_count
         );
 
-        // Paths needs to be aligned to boundary of 8
-        out_paths.size = align_to(out_paths.size, 8);
+        // Paths needs to be aligned to boundary of at least '8' bytes
+        out_paths.size = align_to(out_paths.size, std::max<uint32_t>(def_align, 8));
 
         // Reduce chunk sizes but align them to their alignment boundary.
         uint32_t chunk_idx = 0;
@@ -331,6 +425,7 @@ namespace hailstorm::v1
         hailstorm::v1::HailstormWriteData const& write_data
     ) noexcept -> hailstorm::Task
     {
+        // TODO: assert(params.pack_slice_alignment is power of '2' or '0');
         uint32_t const res_count = uint32_t(write_data.paths.size());
 
         Array<HailstormChunk> chunks{ params.temp_alloc };
@@ -351,7 +446,7 @@ namespace hailstorm::v1
         // Calculate an estimated size for the whole cluster.
         // TODO: This size is currently exact, but once we start compressing / encrypting this will no longer be the case.
         detail::Offsets offsets;
-        size_t const final_cluster_size = cluster_size_info(res_count, chunks, paths_info, offsets);
+        size_t const final_cluster_size = cluster_size_info(params.pack_slice_alignment, res_count, chunks, paths_info, offsets);
 
         // Fill-in header data
         HailstormHeader header{
@@ -362,12 +457,13 @@ namespace hailstorm::v1
             .is_expansion = false,
             .is_patch = false,
             .is_baked = false,
-            .count_chunks = uint16_t(chunks.count()),
-            .count_resources = uint16_t(res_count),
+            .count_chunks = chunks.count(),
+            .count_resources = res_count,
+            .pack_slice_alignment = params.pack_slice_alignment
         };
         header.magic = Constant_HailstormMagic;
         header.header_version = Constant_HailstormHeaderVersionV0;
-        header.header_size = offsets.paths_data;
+        header.header_size = offsets.resources + sizeof(hailstorm::v1::HailstormResource) * header.count_resources;
         paths_info.offset = offsets.paths_data;
 
         // Copy custom values into the final header.
@@ -381,7 +477,7 @@ namespace hailstorm::v1
             chunk.size_origin = chunk.size;
             chunk.offset = std::exchange(
                 chunk_offset,
-                align_to(chunk_offset + chunk.size, 8)
+                align_to(chunk_offset + chunk.size, std::max<uint32_t>(params.pack_slice_alignment, 8))
             );
         }
 
@@ -461,6 +557,7 @@ namespace hailstorm::v1
                 res.meta_offset = pack_resources[meta_map_idx].meta_offset;
             }
 
+#if 0
             {
                 size_t& data_chunk_used = sizes[res.chunk];
                 Data const data = write_data.data[idx];
@@ -478,6 +575,40 @@ namespace hailstorm::v1
 
                 data_chunk_used = align_to(data_chunk_used + data.size, data_chunk.align);
             }
+#else
+            {
+                Data const data = write_data.data[idx];
+
+                // Store data location
+                res.size = uint32_t(data.size); // set the whole size, even when stored across multiple chunks
+                res.offset = uint32_t(sizes[res.chunk]); // offset in the initial chunk
+
+                size_t data_remaining = data.size;
+                uint32_t write_chunk = res.chunk;
+                while(data_remaining > 0)
+                {
+                    size_t const read_offset = data.size - data_remaining;
+                    assert(read_offset == 0 || data_chunk_used == 0);
+
+                    size_t& data_chunk_used = sizes[write_chunk];
+                    size_t const data_chunk_size = chunks[write_chunk].size;
+                    size_t const data_chunk_available = data_chunk_size - data_chunk_used;
+                    size_t const data_chunk_written = std::min(data_chunk_available, data_remaining);
+
+                    data_remaining -= data_chunk_written;
+                    data_chunk_used = align_to(data_chunk_used + data_chunk_written, 8);
+
+                    write_chunk += 1;
+                }
+
+                co_await writer.write_resource(
+                    write_data, idx, chunks[res.chunk].offset + res.offset
+                );
+
+                // Ensure the data view has an alignment smaller or equal to the chunk alignment.
+                assert(data.align <= 8);
+            }
+#endif
 
             {
                 res.path_size = uint32_t(write_data.paths[idx].size());

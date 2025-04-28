@@ -12,7 +12,8 @@ namespace hailstorm
     {
 
         //! \brief Reads hailstorm cluser form the given input containing at least the whole header data.
-        //! \note If successful the passed HailstormData struct will have all field updated.
+        //! \note If successful the passed HailstormData struct will have all field updated. The output structure
+        //!   requires the inputdata to be available when accessed at it's not a copy of the input data, just a view of it.
         //!
         //! \param [in] header_data Containing the whole hailstorm header description.
         //! \param [out] out_hailstorm Hailstorm object that will have fields updated to access header data easily.
@@ -26,7 +27,7 @@ namespace hailstorm
         //!
         //! \note Because HS format is quite complex when it comes to writing the creation is handled internally,
         //!   however chunk selection and data transforms are defined using the HailstormWriteParams struct.
-        //!   This allows for the main routine to stay stable and handle all boilter plate regarding resource
+        //!   This allows for the main routine to stay stable and handle all boilerplate regarding resource
         //!   iterations, but flexible enough to have full control on how resources are stored in the final cluster.
         //!
         //! \pre All three lists describing resource information are of the same size.
@@ -47,7 +48,7 @@ namespace hailstorm
         //!   data into it's expected location.
         //! \note Because HS format is quite complex when it comes to writing the creation is handled internally,
         //!   however chunk selection and data writing are defined using the HailstormAsyncWriteParams struct.
-        //!   This allows for the main routine to stay stable and handle all boilter plate regarding resource
+        //!   This allows for the main routine to stay stable and handle all boilerplate regarding resource
         //!   iterations, but flexible enough to have full control on how data is written.
         //!
         //! \pre All three lists describing resource information are of the same size.
@@ -115,7 +116,7 @@ namespace hailstorm
             std::span<uint32_t const> metadata_mapping;
 
             //! \brief Application custom values.
-            uint32_t custom_values[4];
+            uint32_t custom_values[2];
         };
 
         //! \brief Used to select chunks for resource metadata and data destinations.
@@ -123,10 +124,10 @@ namespace hailstorm
         struct HailstormWriteChunkRef
         {
             //! \brief Chunk index where data should be stored.
-            uint16_t data_chunk;
+            uint32_t data_chunk;
 
             //! \brief Chunk index where data should be stored.
-            uint16_t meta_chunk;
+            uint32_t meta_chunk;
 
             //! \brief If 'true' a new chunk will be created and the 'data_chunk' value will be used as a base.
             bool data_create = false;
@@ -149,12 +150,16 @@ namespace hailstorm
             //! \param [in] resource_meta Metadata associated with the given resource.
             //! \param [in] resource_data Object data associated with the given resource.
             //! \param [in] chunks List of already existing chunks.
+            //! \param [in] partial_chunk_start The initial chunk that should be considered for selection when 'ChunkCreateFn' returned chunks with 'flag > 0' values.
+            //! \param [in] partial_chunk_count The number of chunks that should be considered when selection the chunk holding the data.
             //! \param [in] userdata Value passed by the user using the 'HailstormWriteParams' struct.
             //! \return Indices for the data and metadata pair given.
             using ChunkSelectFn = auto(
                 hailstorm::Data resource_meta,
                 hailstorm::Data resource_data,
                 std::span<hailstorm::v1::HailstormChunk const> chunks,
+                uint32_t partial_chunk_start,
+                uint32_t partial_chunk_count,
                 void* userdata
             ) noexcept -> hailstorm::v1::HailstormWriteChunkRef;
 
@@ -223,6 +228,9 @@ namespace hailstorm
 
             //! \brief Estimated number of chunks in the final cluster, allows to minimize temporary allocations.
             uint32_t estimated_chunk_count = 0;
+
+            //! \brief Forced alignment for the whole pack. This alignment is applied to the header, paths data and each chunk.
+            uint32_t pack_slice_alignment = 0;
 
             //! \brief Please see documentation of ChunkSelectFn.
             ChunkSelectFn* fn_select_chunk;
@@ -307,7 +315,7 @@ namespace hailstorm
                 base_chunk_info.is_encrypted = false;
                 base_chunk_info.persistance = 1; // Persistance is regular by default
                 base_chunk_info.type = 3; // Type is mixed by default
-                base_chunk_info.size = 32 * Constant_1MiB; // By default chunks should be at max 32MiB
+                base_chunk_info.size = 32 * Constant_1MiB; // By default chunks should be at max 32MiB.
             }
 
             // Calculate chunk size (meta + data)
@@ -320,6 +328,10 @@ namespace hailstorm
                 base_chunk_info.size = final_size;
                 base_chunk_info.align = (uint32_t) resource_data.align;
             }
+
+            //! NOTE:
+            //! * 'base_chunk_info.align' - The value set will be ignored and forced to 'pack_slice_alignment' if set.
+            //! * 'base_chunk_info.size' - The value will be realigned to 'pack_slice_alignment' if set.
             return base_chunk_info;
         }
 
@@ -329,11 +341,13 @@ namespace hailstorm
             hailstorm::Data const& /*resource_meta*/,
             hailstorm::Data /*resource_data*/,
             std::span<hailstorm::v1::HailstormChunk const> chunks,
+            uint32_t /*partial_chunk_start*/,
+            uint32_t /*partial_chunk_count*/,
             void* /*userdata*/
         ) noexcept -> hailstorm::v1::HailstormWriteChunkRef
         {
             // Always pick last chunk, if it's too small a 'create' chunk will be called and the select logic will be repeated.
-            uint16_t const last_chunk = uint16_t(chunks.size() - 1);
+            uint32_t const last_chunk = uint32_t(chunks.size() - 1);
 
             // Default selection only supports mixed chunks.
             // TODO: assert(chunks[last_chunk].type == 3);

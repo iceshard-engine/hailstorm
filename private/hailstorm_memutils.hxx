@@ -46,21 +46,21 @@ namespace hailstorm
 
     inline auto align_to(void* ptr, uint32_t alignment) noexcept
     {
-        uintptr_t ptr_val = reinterpret_cast<uintptr_t>(ptr);
-        if (uintptr_t alignment_miss = (ptr_val % alignment); alignment_miss != 0)
-        {
-            ptr_val = alignment - alignment_miss;
-        }
-        return reinterpret_cast<void*>(ptr_val);
+        // TODO: Pre (alignment is a power of '2')
+        uint32_t const align_mask = alignment - 1;
+
+        uintptr_t const ptr_val = reinterpret_cast<uintptr_t>(ptr);
+        uintptr_t const padding = (uintptr_t{0} - ptr_val) & align_mask;
+        return reinterpret_cast<void*>(ptr_val + padding);
     }
 
-    inline auto align_to(uint64_t ptr_val, uint32_t alignment) noexcept
+    template<typename T>
+    inline auto align_to(T ptr_val, uint32_t alignment) noexcept -> T
     {
-        if (uintptr_t alignment_miss = (ptr_val % alignment); alignment_miss != 0)
-        {
-            ptr_val += alignment - alignment_miss;
-        }
-        return ptr_val;
+        // TODO: Pre (alignment is a power of '2')
+        uint32_t const align_mask = alignment - 1;
+        T const padding = (T{0} - ptr_val) & align_mask;
+        return ptr_val + padding;
     }
 
 } // namespace hailstorm
