@@ -219,7 +219,6 @@ namespace hailstorm::v1
                     meta, data, chunks[ref.data_chunk], params.userdata
                 );
                 new_chunk.offset = 0;
-                new_chunk.size_origin = 0;
                 new_chunk.count_entries = 0;
 
                 // Only 'file data' or 'app-specific' chunks can be partial.
@@ -474,7 +473,6 @@ namespace hailstorm::v1
         size_t chunk_offset = offsets.data;
         for (HailstormChunk& chunk : chunks)
         {
-            chunk.size_origin = chunk.size;
             chunk.offset = std::exchange(
                 chunk_offset,
                 align_to(chunk_offset + chunk.size, std::max<uint32_t>(params.pack_slice_alignment, 8))
@@ -601,9 +599,23 @@ namespace hailstorm::v1
                     write_chunk += 1;
                 }
 
+                hailstorm::v1::HailstormWriteInfo write_info{
+                    .resource_index = idx,
+                    .compression = { .compression_type = 0, .origin_size = res.size }
+                };
+
                 co_await writer.write_resource(
-                    write_data, idx, chunks[res.chunk].offset + res.offset
+                    write_data, write_info, chunks[res.chunk].offset + res.offset
                 );
+
+                // Unless compressed, 'origin_size' needs to equal 'size' but we don't care about the compressed size and how it compares to the uncompressed version.
+                assert(res.compression_type != 0 || res.size == write_info.compression.origin_size);
+
+                // Copy over all compression information.
+                res.compression_type = write_info.compression.compression_type;
+                res.compression_level = write_info.compression.compression_level;
+                res.compression_param = write_info.compression.compression_param;
+                res.size_origin = write_info.compression.origin_size;
 
                 // Ensure the data view has an alignment smaller or equal to the chunk alignment.
                 assert(data.align <= 8);

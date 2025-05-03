@@ -24,9 +24,9 @@ namespace hailstorm
     };
 
     template<typename T>
-    concept IDataWriter = requires(T t) {
+    concept IDataWriter = requires(T t, hailstorm::v1::HailstormWriteInfo& write_info) {
         { t.write_header(hailstorm::Data{}, size_t{}) } -> std::convertible_to<DataWriterStage>;
-        { t.write_resource(hailstorm::v1::HailstormWriteData{}, uint32_t{}, size_t{}) } -> std::convertible_to<DataWriterStage>;
+        { t.write_resource(hailstorm::v1::HailstormWriteData{}, write_info, size_t{}) } -> std::convertible_to<DataWriterStage>;
         { t.write_metadata(hailstorm::v1::HailstormWriteData{}, uint32_t{}, size_t{}) } -> std::convertible_to<DataWriterStage>;
         { t.finalize() } -> std::convertible_to<hailstorm::Memory>;
     };
@@ -63,21 +63,22 @@ namespace hailstorm
         }
 
         auto write_resource(
-            hailstorm::v1::HailstormWriteData const& data, uint32_t idx, size_t write_offset
+            hailstorm::v1::HailstormWriteData const& data, hailstorm::v1::HailstormWriteInfo& write_info, size_t write_offset
         ) noexcept
         {
+            uint32_t const res_idx = write_info.resource_index;
             hailstorm::Memory const target_mem = ptr_add(_memory, write_offset);
 
             // If data has a nullptr locations, call the write callback to access resource data.
             // This allows us to "stream" input data to the final buffer.
             // TODO: It would be also good to provide a way to stream final data to a file also.
-            if (data.data[idx].location == nullptr)
+            if (data.data[res_idx].location == nullptr)
             {
-                _params.fn_resource_write(data, idx, target_mem, _params.userdata);
+                _params.fn_resource_write(data, write_info, target_mem, _params.userdata);
             }
             else // We got the data so just copy it over
             {
-                memcpy(target_mem.location, data.data[idx].location, data.data[idx].size);
+                memcpy(target_mem.location, data.data[res_idx].location, data.data[res_idx].size);
             }
             return DataWriterStage{ true };
         }
@@ -127,10 +128,10 @@ namespace hailstorm
         }
 
         auto write_resource(
-            hailstorm::v1::HailstormWriteData const& data, uint32_t idx, size_t write_offset
+            hailstorm::v1::HailstormWriteData const& data, hailstorm::v1::HailstormWriteInfo& write_info, size_t write_offset
         ) noexcept
         {
-            return DataWriterStage{ _params.fn_async_write_resource(data, idx, write_offset, _params.async_userdata) };
+            return DataWriterStage{ _params.fn_async_write_resource(data, write_info, write_offset, _params.async_userdata) };
         }
 
         auto write_metadata(

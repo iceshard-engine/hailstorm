@@ -136,6 +136,46 @@ namespace hailstorm
             bool meta_create = false;
         };
 
+        //! \brief Helper structure to write compression details for resources written to the hailstorm cluster.
+        struct HailstormWriteCompressionInfo
+        {
+            //! \brief Compression flags to determine the used algorithm. Some this value may be entirely app specific if the 'AppSpecific' flag is set.
+            //! \note This library standarizes the following compression flags / algorithms.
+            //!   * 'Uncompressed' - (value: 0)
+            //!   * 'ZLib' - Common compression library for data-streams. (value: 1)
+            //!   * 'Zstd' - Real-time compression algorithm developed by Facebook. (value: 2)
+            //!   * 'QOI' - The data is compressed as "Quite OK Image Format" (value: 3)
+            //!   * 'QOA' - The data is compressed as "Quite OK Audio Format" (value: 4)
+            //!   * 'AppSpecific' (flag) - Application specific compression format. When this flag is set, the values between 1-15 are application specific. (value: 16)
+            //!
+            //! \remarks The 'standarized' formats where chosen based on my own needs and biases, but you are free to use the 'AppSpecific' flag and
+            //!   do whatever you want!
+            uint8_t compression_type : 5;
+
+            //! \brief The compression level (if supported by the given format).
+            uint8_t compression_level : 3;
+
+            //! \brief Simple value param to be used when decompressing.
+            //! \note This param is not used by any of the standarized compression formats. If you wish to pass values for any of the formats described under 'compresion_type' field (ZLib, Zstd, etc...)
+            //!   you should use the 'AppSpecific' since it could be incompatible with the common defaults for each library.
+            uint8_t compression_param;
+
+            //! \brief If compression was performed this field needs to contain the uncompressed size of the file.
+            uint32_t origin_size;
+        };
+
+        //! \brief Helper structure accessible when writing resources allowing to provide detailed information about the format of the stored data.
+        struct HailstormWriteInfo
+        {
+            //! \brief The resource index that this data structure is referring to.
+            uint32_t const resource_index;
+
+            //! \brief If resource was compressed the application may describe the compression format in this member.
+            //! \note Setting this member will not affect the data written to the pack file. Writing compressed data is the responsibility of the implementation.
+            //! \note If no compression was performed this member should not be written to.
+            hailstorm::v1::HailstormWriteCompressionInfo compression;
+        };
+
         //! \brief A description of the 'write' operation for a Hailstorm cluster. Allows to partially control how
         //!   the resulting hailstorm cluster looks.
         //! \attention Please make sure you properly fill 'required' members or use default values.
@@ -181,18 +221,34 @@ namespace hailstorm
                 void* userdata
             ) noexcept -> hailstorm::v1::HailstormChunk;
 
-            //! \brief Function signature for writing resource data to a chunk.
+            //! \brief Function signature for writing resource metadata to a chunk.
             //!
-            //! \note This function is called for each resource in the 'HailstormWriteData' struct.
+            //! \note This function is called for each unique resource metadata in the 'HailstormWriteData' struct.
             //!
             //! \param [in] write_data Data passed to the write procedure for easy access.
             //! \param [in] resource_index Index of the resource requested to be written.
             //! \param [in] memory Memory block where the resource data should be written.
             //! \param [in] userdata Value passed by the user using the 'HailstormWriteParams' struct.
             //! \return 'true' if the write was successful, otherwise 'false'.
-            using ResouceWriteFn = auto(
+            using ResouceWriteMetadataFn = auto(
                 hailstorm::v1::HailstormWriteData const& write_data,
                 uint32_t resource_index,
+                hailstorm::Memory memory,
+                void* userdata
+            ) noexcept -> bool;
+
+            //! \brief Function signature for writing resource metadata to a chunk.
+            //!
+            //! \note This function is called for each resource in the 'HailstormWriteData' struct.
+            //!
+            //! \param [in] write_data Data passed to the write procedure for easy access.
+            //! \param [in] write_info Holds information about the current written resource. It also allows to write compression info for the resource.
+            //! \param [in] memory Memory block where the resource data should be written.
+            //! \param [in] userdata Value passed by the user using the 'HailstormWriteParams' struct.
+            //! \return 'true' if the write was successful, otherwise 'false'.
+            using ResouceWriteDataFn = auto(
+                hailstorm::v1::HailstormWriteData const& write_data,
+                hailstorm::v1::HailstormWriteInfo& write_info,
                 hailstorm::Memory memory,
                 void* userdata
             ) noexcept -> bool;
@@ -239,7 +295,10 @@ namespace hailstorm
             ChunkCreateFn* fn_create_chunk;
 
             //! \brief Please see documentation of ResouceWriteFn.
-            ResouceWriteFn* fn_resource_write;
+            ResouceWriteMetadataFn* fn_resource_write_metadata;
+
+            //! \brief Please see documentation of ResouceWriteFn.
+            ResouceWriteDataFn* fn_resource_write;
 
             //! \brief Please see documentation of CustomChunkWriteFn.
             //! \note This function is only called if there are chunks of type '0' in the cluster.
@@ -268,9 +327,16 @@ namespace hailstorm
                 void* userdata
             ) noexcept -> bool;
 
-            using AsyncWriteDataFn = auto(
+            using AsyncWriteMetadataFn = auto(
                 hailstorm::v1::HailstormWriteData const& write_data,
                 uint32_t resource_index,
+                size_t write_offset,
+                void* userdata
+            ) noexcept -> bool;
+
+            using AsyncWriteDataFn = auto(
+                hailstorm::v1::HailstormWriteData const& write_data,
+                hailstorm::v1::HailstormWriteInfo& write_info,
                 size_t write_offset,
                 void* userdata
             ) noexcept -> bool;
@@ -288,7 +354,7 @@ namespace hailstorm
 
             AsyncOpenFn* fn_async_open;
             AsyncWriteHeaderFn* fn_async_write_header;
-            AsyncWriteDataFn* fn_async_write_metadata;
+            AsyncWriteMetadataFn* fn_async_write_metadata;
             AsyncWriteDataFn* fn_async_write_resource;
             AsyncwriteCustomChunkFn* fn_async_write_custom_chunk;
             AsyncCloseFn* fn_async_close;
@@ -311,8 +377,6 @@ namespace hailstorm
             if (base_chunk_info.size == 0)
             {
                 base_chunk_info.align = 8;
-                base_chunk_info.is_compressed = false;
-                base_chunk_info.is_encrypted = false;
                 base_chunk_info.persistance = 1; // Persistance is regular by default
                 base_chunk_info.type = 3; // Type is mixed by default
                 base_chunk_info.size = 32 * Constant_1MiB; // By default chunks should be at max 32MiB.
