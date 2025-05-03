@@ -375,7 +375,7 @@ namespace hailstorm::v1
             );
 
             // Only 'file data' or 'app-specific' chunks can be partial.
-            assert(new_chunk.flags == 0 ^ (new_chunk.type == 2 || new_chunk.type == 0));
+            assert((new_chunk.flags == 0) || (new_chunk.type == 2 || new_chunk.type == 0));
 
             // Force the alignment value and realign the chunk size if necessary.
             if (params.pack_slice_alignment > 0)
