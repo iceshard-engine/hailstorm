@@ -1,6 +1,7 @@
 #pragma once
 #include <span>
 #include <string_view>
+#include <memory>
 
 namespace hailstorm
 {

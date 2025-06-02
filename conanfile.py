@@ -40,6 +40,8 @@ class IceShardHailstormRecipe(ConanFile):
         deps = CMakeDeps(self)
         deps.generate()
         tc = CMakeToolchain(self, "Ninja")
+        tc.variables["CMAKE_C_COMPILER"] = str(self.settings.compiler)
+        tc.variables["CMAKE_CXX_COMPILER"] = str(self.settings.compiler)
         tc.generate()
 
     def build(self):

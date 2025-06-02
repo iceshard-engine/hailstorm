@@ -3,6 +3,7 @@
 #include <hailstorm/hailstorm_operations.hxx>
 #include <coroutine>
 #include <cassert>
+#include <cstring>
 
 namespace hailstorm
 {
