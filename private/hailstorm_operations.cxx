@@ -130,7 +130,7 @@ namespace hailstorm::v1
 
         for (HailstormChunk const& chunk : chunks)
         {
-            assert((chunks.size() % def_align) == 0);
+            assert((chunk.size % def_align) == 0);
             final_size += chunk.size;
         }
         return final_size;
