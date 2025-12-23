@@ -7,8 +7,8 @@
 namespace hailstorm
 {
 
-    //! \brief A word value used to identify the Hailstorm format.
-    static constexpr uint64_t Constant_HailstormMagic = 'ISHS';
+    //! \brief A QWord value used to identify the Hailstorm format.
+    static constexpr uint32_t Constant_HailstormMagic = 'ISHS';
 
     //! \brief A word value used to identify the Hailstorm format specification version.
     static constexpr uint32_t Constant_HailstormHeaderVersionV0 = 'HSC0';
