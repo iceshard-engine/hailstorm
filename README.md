@@ -1,4 +1,5 @@
 # About
+![TeamCity build status](https://teamcity.iceshard.net/app/rest/builds/buildType:id:IceShard_HailStormBuild/statusIcon.svg)
 
 An attempt to make a resource package format that allows to efficiently load resources at runtime with additional information on how to load and keep such resources in memory.
 
