@@ -51,9 +51,11 @@ namespace hailstorm
     struct Allocator
     {
         virtual ~Allocator() noexcept = default;
-        virtual auto allocate(size_t size) noexcept -> hailstorm::Memory { return { malloc(size), size, 8 }; }
-        virtual void deallocate(void* ptr) noexcept { free(ptr); }
-        virtual void deallocate(hailstorm::Memory mem) noexcept { this->deallocate(mem.location); }
+        virtual auto allocate(size_t size) noexcept -> hailstorm::Memory = 0;
+        virtual void deallocate(void* ptr) noexcept = 0;
+        virtual void deallocate(hailstorm::Memory mem) noexcept = 0;
+
+        static auto default_allocator() noexcept -> hailstorm::Allocator&;
     };
 
     static constexpr size_t Constant_1KiB = 1024;

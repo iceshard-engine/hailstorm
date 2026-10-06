@@ -51,7 +51,7 @@ namespace hailstorm
 
         inline void reserve(uint32_t count) noexcept;
         inline void resize(uint32_t count) noexcept;
-        inline void memset(uint8_t value) noexcept requires (std::is_trivial_v<T>);
+        inline void memset(uint8_t value) noexcept requires (std::is_trivially_copyable_v<T>);
 
         inline void push_back(T&& val) noexcept;
         inline void push_back(T const& val) noexcept;
@@ -118,7 +118,7 @@ namespace hailstorm
     }
 
     template<typename T>
-    inline void Array<T>::memset(uint8_t value) noexcept requires (std::is_trivial_v<T>)
+    inline void Array<T>::memset(uint8_t value) noexcept requires (std::is_trivially_copyable_v<T>)
     {
         std::memset(_vector.data(), value, _vector.size() * sizeof(T));
     }

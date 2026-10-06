@@ -1,6 +1,7 @@
 #pragma once
 #include "hailstorm_tracked_memory.hxx"
 #include <algorithm>
+#include <cmath>
 
 namespace hailstorm
 {
